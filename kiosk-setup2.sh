@@ -122,13 +122,21 @@ kies_afbeelding() {  # $1 = tijdelijk bestand zonder extensie; zet het pad in KE
     read -r -p "of typ 's' om over te slaan: " X
     if [ "$X" = s ]; then break; fi
     if [ -n "$X" ]; then
-      ext="${X##*.}"; ext="${ext,,}"; ext="${ext%%\?*}"
-      case "$ext" in jpg|jpeg|png) ;; *) echo "Alleen jpg of png."; continue;; esac
       case "$X" in
         http://*|https://*)
           if ! command -v wget >/dev/null 2>&1; then echo "wget ontbreekt (apt install wget)."; continue; fi
-          if ! wget -q -O "$1.$ext" "$X"; then echo "Downloaden mislukt."; rm -f "$1.$ext"; continue; fi ;;
+          if ! wget -q -O "$1.tmp" "$X"; then echo "Downloaden mislukt."; rm -f "$1.tmp"; continue; fi
+          # Type herkennen aan de eerste bytes (werkt ook met verkorte adressen)
+          magic="$(od -An -tx1 -N4 "$1.tmp" | tr -d ' \n')"
+          case "$magic" in
+            89504e47) ext=png;;
+            ffd8ff*)  ext=jpg;;
+            *) echo "Dit is geen jpg- of png-afbeelding."; rm -f "$1.tmp"; continue;;
+          esac
+          mv "$1.tmp" "$1.$ext" ;;
         *)
+          ext="${X##*.}"; ext="${ext,,}"
+          case "$ext" in jpg|jpeg|png) ;; *) echo "Alleen jpg of png."; continue;; esac
           if [ -f "$X" ]; then cp "$X" "$1.$ext"; else echo "Bestand niet gevonden."; continue; fi ;;
       esac
       KEUZE_PAD="$1.$ext"
@@ -195,7 +203,7 @@ if ! ja "Doorgaan met installeren?" j; then echo "Afgebroken."; exit 1; fi
 ### Installatie ############################################################
 echo ">> Pakketten installeren"
 export DEBIAN_FRONTEND=noninteractive
-PKGS="xorg openbox lightdm lightdm-gtk-greeter firefox-esr rsync sudo x11-xserver-utils unattended-upgrades apt-listchanges fonts-dejavu libpam-systemd dbus-x11 dbus-user-session numlockx"
+PKGS="xorg openbox lightdm lightdm-gtk-greeter firefox-esr firefox-esr-l10n-nl rsync sudo x11-xserver-utils unattended-upgrades apt-listchanges fonts-dejavu libpam-systemd dbus-x11 dbus-user-session numlockx"
 if [ "$USB" = ja ]; then PKGS="$PKGS udisks2 udiskie gvfs ntfs-3g exfatprogs"; fi
 if [ "$KNOP" = ja ]; then PKGS="$PKGS tint2 zenity"; fi
 if [ "$INACT" = slaap ] || [ "$INACT" = uit ]; then PKGS="$PKGS xprintidle"; fi
@@ -265,6 +273,11 @@ cat > /usr/lib/firefox-esr/distribution/policies.json <<EOP
     "DisableAppUpdate": true,
     "DisableProfileImport": true,
     "DisableAccounts": true,
+    "RequestedLocales": ["nl", "en-US"],
+    "Preferences": {
+      "intl.accept_languages": { "Value": "nl-BE, nl, en-US, en", "Status": "default" },
+      "browser.translations.automaticallyPopup": { "Value": false, "Status": "default" }
+    },
     "PasswordManagerEnabled": false,
     "BlockAboutConfig": true
     $FILTER
