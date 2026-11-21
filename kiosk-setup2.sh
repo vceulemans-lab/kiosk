@@ -329,6 +329,11 @@ if [ -n "$BGTMP" ]; then
   rm -f "$BGTMP"
 fi
 
+echo ">> NumLock aan (voor de beheerder via de systeem-autostart)"
+if ! grep -q numlockx /etc/xdg/openbox/autostart 2>/dev/null; then
+  echo 'numlockx on &' >> /etc/xdg/openbox/autostart
+fi
+
 echo ">> Openbox-sessie voor kiosk"
 install -d -o kiosk -g kiosk /home/kiosk/.config/openbox /home/kiosk/.config/tint2
 cp /etc/xdg/openbox/rc.xml /home/kiosk/.config/openbox/rc.xml
@@ -338,6 +343,7 @@ sed -i '0,/<applications>/s||<applications>\n<application class="firefox*"><maxi
 AS=/home/kiosk/.config/openbox/autostart
 {
   echo ". /etc/kiosk.conf"
+  echo "numlockx on &"
   if [ -n "$BGFILE" ]; then echo "feh --no-fehbg --bg-fill $BGFILE &"; else echo "xsetroot -solid black &"; fi
   if [ "$INACT" = scherm ]; then
     echo "xset s off +dpms dpms $((MIN*60)) $((MIN*60)) $((MIN*60)) &"
@@ -373,7 +379,7 @@ border_sides = TBLR
 background_color = #b00020 100
 border_color = #ffffff 60
 
-panel_items = P:C
+panel_items = PFC
 panel_size = 100% 34
 panel_position = bottom center horizontal
 panel_margin = 0 0
@@ -385,16 +391,14 @@ panel_layer = top
 strut_policy = minimum
 autohide = 0
 
-execp = new
-execp_command = echo "Computer afsluiten"
-execp_interval = 0
-execp_has_icon = 0
-execp_centered = 1
-execp_font = Sans Bold 11
-execp_font_color = #ffffff 100
-execp_padding = 12 4
-execp_background_id = 2
-execp_lclick_command = /usr/local/bin/kiosk-afsluiten
+button = new
+button_text = Computer afsluiten
+button_lclick_command = /usr/local/bin/kiosk-afsluiten
+button_font = Sans Bold 11
+button_font_color = #ffffff 100
+button_padding = 12 4 0
+button_background_id = 2
+button_centered = 1
 
 time1_format = %H:%M
 time1_font = Sans 12
