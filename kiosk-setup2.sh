@@ -110,11 +110,12 @@ fi
 echo
 if ja "Knop 'Computer afsluiten' tonen in de kiosk?" j; then KNOP=ja; else KNOP=nee; fi
 
-### 4. Achtergrond via usb-stick ###########################################
-BGTMP=""
-echo
-if ja "Een andere achtergrond dan zwart (afbeelding van een usb-stick)?" n; then
-  while [ -z "$BGTMP" ]; do
+### 4. Afbeeldingen via usb-stick (achtergrond en opstartbeeld) ###########
+kies_afbeelding() {  # $1 = tijdelijk bestand zonder extensie; zet het pad in KEUZE_PAD
+  KEUZE_PAD=""
+  local X N f ext i
+  local -a PARTS IMGS
+  while [ -z "$KEUZE_PAD" ]; do
     echo
     read -r -p "Steek de usb-stick in en druk op Enter (typ 's' om over te slaan): " X
     if [ "$X" = s ]; then break; fi
@@ -139,11 +140,22 @@ if ja "Een andere achtergrond dan zwart (afbeelding van een usb-stick)?" n; then
     read -r -p "Nummer van de afbeelding (0 = andere stick kiezen): " N
     if [[ "$N" =~ ^[0-9]+$ ]] && [ "$N" -ge 1 ] && [ "$N" -le "${#IMGS[@]}" ]; then
       f="${IMGS[$((N-1))]}"; ext="${f##*.}"; ext="${ext,,}"
-      cp "$f" "/root/.kiosk-achtergrond.$ext"
-      BGTMP="/root/.kiosk-achtergrond.$ext"
+      cp "$f" "$1.$ext"
+      KEUZE_PAD="$1.$ext"
     fi
     umount /mnt/kioskusb
   done
+}
+
+BGTMP=""
+echo
+if ja "Een andere achtergrond dan zwart (afbeelding van een usb-stick)?" n; then
+  kies_afbeelding /root/.kiosk-achtergrond; BGTMP="$KEUZE_PAD"
+fi
+SPLTMP=""
+echo
+if ja "Een eigen opstartbeeld (splashscreen) tonen tijdens het opstarten?" n; then
+  kies_afbeelding /root/.kiosk-splash; SPLTMP="$KEUZE_PAD"
 fi
 
 ### Overzicht ##############################################################
@@ -161,6 +173,7 @@ case "$INACT" in
 esac
 echo "Afsluitknop      : $KNOP"
 echo "Achtergrond      : ${BGTMP:-zwart}"
+echo "Opstartbeeld     : ${SPLTMP:-geen}"
 echo "============================================="
 if ! ja "Doorgaan met installeren?" j; then echo "Afgebroken."; exit 1; fi
 
@@ -172,6 +185,7 @@ if [ "$USB" = ja ]; then PKGS="$PKGS udisks2 udiskie gvfs ntfs-3g exfatprogs"; f
 if [ "$KNOP" = ja ]; then PKGS="$PKGS tint2 zenity"; fi
 if [ "$INACT" = slaap ] || [ "$INACT" = uit ]; then PKGS="$PKGS xprintidle"; fi
 if [ -n "$BGTMP" ]; then PKGS="$PKGS feh"; fi
+if [ -n "$SPLTMP" ]; then PKGS="$PKGS plymouth imagemagick"; fi
 apt-get -o DPkg::Lock::Timeout=300 update
 # shellcheck disable=SC2086
 apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends $PKGS
@@ -441,6 +455,45 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 EOF
+
+echo ">> Opstartbeeld"
+if [ -n "$SPLTMP" ]; then
+  T=/usr/share/plymouth/themes/kiosk
+  install -d "$T"
+  if command -v magick >/dev/null 2>&1; then
+    magick "$SPLTMP" -resize '1920x1920>' "$T/splash.png"
+  else
+    convert "$SPLTMP" -resize '1920x1920>' "$T/splash.png"
+  fi
+  rm -f "$SPLTMP"
+  cat > "$T/kiosk.plymouth" <<'EOS'
+[Plymouth Theme]
+Name=Kiosk
+Description=Kiosk-opstartscherm
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/kiosk
+ScriptFile=/usr/share/plymouth/themes/kiosk/kiosk.script
+EOS
+  cat > "$T/kiosk.script" <<'EOS'
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+img = Image("splash.png");
+sw = Window.GetWidth();
+sh = Window.GetHeight();
+scale = Math.Min(sw / img.GetWidth(), sh / img.GetHeight());
+img = img.Scale(img.GetWidth() * scale, img.GetHeight() * scale);
+sprite = Sprite(img);
+sprite.SetX((sw - img.GetWidth()) / 2);
+sprite.SetY((sh - img.GetHeight()) / 2);
+EOS
+  plymouth-set-default-theme -R kiosk
+  if [ -f /etc/default/grub ]; then
+    sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
+    if ! grep -q '^GRUB_TIMEOUT_STYLE' /etc/default/grub; then echo 'GRUB_TIMEOUT_STYLE=hidden' >> /etc/default/grub; fi
+  fi
+fi
 
 echo ">> Sneller opstarten"
 for s in bluetooth cups cups-browsed ModemManager avahi-daemon; do
