@@ -117,8 +117,23 @@ kies_afbeelding() {  # $1 = tijdelijk bestand zonder extensie; zet het pad in KE
   local -a PARTS IMGS
   while [ -z "$KEUZE_PAD" ]; do
     echo
-    read -r -p "Steek de usb-stick in en druk op Enter (typ 's' om over te slaan): " X
+    echo "Steek de usb-stick in en druk op Enter,"
+    echo "of typ een bestandspad (bv. /root/foto.jpg) of webadres (https://...),"
+    read -r -p "of typ 's' om over te slaan: " X
     if [ "$X" = s ]; then break; fi
+    if [ -n "$X" ]; then
+      ext="${X##*.}"; ext="${ext,,}"; ext="${ext%%\?*}"
+      case "$ext" in jpg|jpeg|png) ;; *) echo "Alleen jpg of png."; continue;; esac
+      case "$X" in
+        http://*|https://*)
+          if ! command -v wget >/dev/null 2>&1; then echo "wget ontbreekt (apt install wget)."; continue; fi
+          if ! wget -q -O "$1.$ext" "$X"; then echo "Downloaden mislukt."; rm -f "$1.$ext"; continue; fi ;;
+        *)
+          if [ -f "$X" ]; then cp "$X" "$1.$ext"; else echo "Bestand niet gevonden."; continue; fi ;;
+      esac
+      KEUZE_PAD="$1.$ext"
+      continue
+    fi
     sleep 3
     mapfile -t PARTS < <(lsblk -rpno NAME,TYPE,RM,FSTYPE | awk '$2=="part" && $3=="1" && NF==4 {print $1}')
     if [ "${#PARTS[@]}" -eq 0 ]; then echo "Geen usb-stick gevonden."; continue; fi
