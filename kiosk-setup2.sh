@@ -200,7 +200,7 @@ if [ "$USB" = ja ]; then PKGS="$PKGS udisks2 udiskie gvfs ntfs-3g exfatprogs"; f
 if [ "$KNOP" = ja ]; then PKGS="$PKGS tint2 zenity"; fi
 if [ "$INACT" = slaap ] || [ "$INACT" = uit ]; then PKGS="$PKGS xprintidle"; fi
 if [ -n "$BGTMP" ]; then PKGS="$PKGS feh"; fi
-if [ -n "$SPLTMP" ]; then PKGS="$PKGS plymouth imagemagick"; fi
+if [ -n "$SPLTMP" ]; then PKGS="$PKGS plymouth plymouth-label imagemagick"; fi
 apt-get -o DPkg::Lock::Timeout=300 update
 # shellcheck disable=SC2086
 apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends $PKGS
